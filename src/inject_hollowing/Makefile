@@ -1,4 +1,4 @@
-BOFNAME := inject_earlybird
+BOFNAME := inject_hollowing
 COMINCLUDE := -I ../../libs
 LIBINCLUDE := -l iphlpapi -l ws2_32
 CC_x64 := x86_64-w64-mingw32-gcc

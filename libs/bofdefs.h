@@ -30,6 +30,7 @@ WINBASEAPI BOOL WINAPI KERNEL32$VirtualProtectEx(HANDLE hProcess, LPVOID lpAddre
 WINBASEAPI BOOL WINAPI KERNEL32$CreateProcessW(LPWSTR lpApplicationName, LPWSTR lpCommandLine, LPSECURITY_ATTRIBUTES lpProcessAttributes, LPSECURITY_ATTRIBUTES lpThreadAttributes, BOOL bInheritHandles, DWORD dwCreationFlags, LPVOID lpEnvironment, LPWSTR lpCurrentDirectory, LPSTARTUPINFOW lpStartupInfo, LPPROCESS_INFORMATION lpProcessInformation);
 WINBASEAPI BOOL WINAPI KERNEL32$QueueUserAPC(PAPCFUNC pfnAPC, HANDLE hThread, ULONG_PTR dwData);
 WINBASEAPI BOOL WINAPI KERNEL32$ResumeThread(HANDLE hThread);
+WINBASEAPI BOOL WINAPI KERNEL32$ReadProcessMemory(HANDLE hProcess, LPCVOID lpBaseAddress, LPVOID lpBuffer, SIZE_T nSize, SIZE_T* lpNumberOfBytesRead);
 DECLSPEC_IMPORT HLOCAL WINAPI KERNEL32$LocalAlloc(UINT, SIZE_T);
 DECLSPEC_IMPORT HLOCAL WINAPI KERNEL32$LocalFree(HLOCAL);
 WINBASEAPI BOOL WINAPI KERNEL32$WriteProcessMemory(HANDLE hProcess, LPVOID lpBaseAddress, LPCVOID lpBuffer, SIZE_T nSize, SIZE_T* lpNumberOfBytesWritten);
@@ -61,6 +62,9 @@ WINBASEAPI WINBOOL WINAPI KERNEL32$ConvertFiberToThread(VOID);
 WINBASEAPI VOID WINAPI KERNEL32$DeleteFiber(LPVOID lpFiber);
 WINBASEAPI VOID WINAPI KERNEL32$SwitchToFiber(LPVOID lpFiber);
 WINBASEAPI DWORD WINAPI KERNEL32$WaitForSingleObject(HANDLE hHandle, DWORD dwMilliseconds);
+WINBASEAPI DWORD WINAPI KERNEL32$SuspendThread(HANDLE hThread);
+WINBASEAPI WINBOOL WINAPI KERNEL32$GetThreadContext(HANDLE hThread, LPCONTEXT lpContext);
+WINBASEAPI WINBOOL WINAPI KERNEL32$SetThreadContext(HANDLE hThread, const CONTEXT* lpContext);
 WINBASEAPI HMODULE WINAPI KERNEL32$GetModuleHandleA(LPCSTR lpModuleName);
 WINBASEAPI VOID WINAPI KERNEL32$Sleep(DWORD dwMilliseconds);
 WINBASEAPI WINBOOL WINAPI KERNEL32$DeleteFileW(LPCWSTR lpFileName);
@@ -94,6 +98,9 @@ WINBASEAPI DWORD WINAPI KERNEL32$ExpandEnvironmentStringsW(LPCWSTR lpSrc, LPWSTR
 WINBASEAPI HANDLE WINAPI KERNEL32$CreateToolhelp32Snapshot(DWORD dwFlags, DWORD th32ProcessID);
 WINBASEAPI WINBOOL WINAPI KERNEL32$Process32First(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
 WINBASEAPI WINBOOL WINAPI KERNEL32$Process32Next(HANDLE hSnapshot, LPPROCESSENTRY32 lppe);
+WINBASEAPI WINBOOL WINAPI KERNEL32$Thread32First(HANDLE hSnapshot, LPTHREADENTRY32 lpte);
+WINBASEAPI WINBOOL WINAPI KERNEL32$Thread32Next(HANDLE hSnapshot, LPTHREADENTRY32 lpte);
+WINBASEAPI HANDLE WINAPI KERNEL32$OpenThread(DWORD dwDesiredAccess, WINBOOL bInheritHandle, DWORD dwThreadId);
 WINBASEAPI WINBOOL WINAPI KERNEL32$Module32First(HANDLE hSnapshot, LPMODULEENTRY32 lpme);
 WINBASEAPI WINBOOL WINAPI KERNEL32$Module32Next(HANDLE hSnapshot, LPMODULEENTRY32 lpme);
 WINBASEAPI HMODULE WINAPI KERNEL32$LoadLibraryA(LPCSTR lpLibFileName);
@@ -312,6 +319,7 @@ WINBASEAPI DWORD WINAPI ADVAPI32$SetEntriesInAclA(ULONG cCountOfExplicitEntries,
 WINBASEAPI NTSTATUS NTAPI NTDLL$NtCreateFile(PHANDLE FileHandle, ACCESS_MASK DesiredAccess, POBJECT_ATTRIBUTES ObjectAttributes, PIO_STATUS_BLOCK IoStatusBlock, PLARGE_INTEGER AllocationSize, ULONG FileAttributes, ULONG ShareAccess, ULONG CreateDisposition, ULONG CreateOptions, PVOID EaBuffer, ULONG EaLength);
 WINBASEAPI NTSTATUS NTAPI NTDLL$NtClose(HANDLE Handle);
 WINBASEAPI NTSTATUS NTAPI NTDLL$NtFsControlFile(HANDLE FileHandle, HANDLE Event, PIO_APC_ROUTINE ApcRoutine, PVOID ApcContext, PIO_STATUS_BLOCK IoStatusBlock, ULONG IoControlCode, PVOID InputBuffer, ULONG InputBufferLength, PVOID OutputBuffer, ULONG OutputBufferLength);
+WINBASEAPI NTSTATUS NTAPI NTDLL$NtQueryInformationProcess(HANDLE ProcessHandle, PROCESSINFOCLASS ProcessInformationClass, PVOID ProcessInformation, ULONG ProcessInformationLength, PULONG ReturnLength);
 
 //IMAGEHLP
 WINBASEAPI WINBOOL IMAGEAPI IMAGEHLP$ImageEnumerateCertificates(HANDLE FileHandle, WORD TypeFilter, PDWORD CertificateCount, PDWORD Indices, DWORD IndexCount);
@@ -543,6 +551,9 @@ DECLSPEC_IMPORT WINBOOL WINAPI VERSION$VerQueryValueA(LPCVOID pBlock, LPCSTR lpS
 #define KERNEL32$DeleteFiber  DeleteFiber 
 #define KERNEL32$SwitchToFiber  SwitchToFiber 
 #define KERNEL32$WaitForSingleObject  WaitForSingleObject 
+#define KERNEL32$SuspendThread SuspendThread
+#define KERNEL32$GetThreadContext GetThreadContext
+#define KERNEL32$SetThreadContext SetThreadContext
 #define KERNEL32$Sleep  Sleep 
 #define KERNEL32$DeleteFileW  DeleteFileW 
 #define KERNEL32$CreateFileW  CreateFileW 
@@ -575,6 +586,9 @@ DECLSPEC_IMPORT WINBOOL WINAPI VERSION$VerQueryValueA(LPCVOID pBlock, LPCSTR lpS
 #define KERNEL32$CreateToolhelp32Snapshot CreateToolhelp32Snapshot
 #define KERNEL32$Process32First Process32First
 #define KERNEL32$Process32Next Process32Next
+#define KERNEL32$Thread32First Thread32First
+#define KERNEL32$Thread32Next Thread32Next
+#define KERNEL32$OpenThread OpenThread
 #define KERNEL32$Module32First Module32First
 #define KERNEL32$Module32Next Module32Next
 #define KERNEL32$LoadLibraryA LoadLibraryA
