@@ -13,7 +13,9 @@ typedef NTSTATUS(NTAPI* pNtCreateThreadEx)(PHANDLE, ACCESS_MASK, PVOID, HANDLE, 
 
 void inject(const int pid, const CHAR* shellcode, SIZE_T shellcodeSize) {
     BeaconPrintf(CALLBACK_OUTPUT, "shellcode[0..3]: %02x %02x %02x %02x\n",
-        shellcode[0], shellcode[1], shellcode[2], shellcode[3]);
+        (unsigned char)shellcode[0], (unsigned char)shellcode[1],
+        (unsigned char)shellcode[2], (unsigned char)shellcode[3]);
+        
     BeaconPrintf(CALLBACK_OUTPUT, "pid: %d\n", pid);
 
     HMODULE hNtdll = (HMODULE)KERNEL32$GetModuleHandleA("ntdll.dll");

